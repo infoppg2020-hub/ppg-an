@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotiflow - ฟังเพลงออนไลน์สไตล์ Spotify</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tone.js for Real Synthesized Music Playback (No external MP3 dependencies that might break) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Google Fonts: Inter & Prompt for Thai support -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Prompt', 'sans-serif'],
+                    },
+                    colors: {
+                        spotify: {
+                            green: '#1DB954',
+                            greenHover: '#1ed760',
+                            black: '#000000',
+                            base: '#121212',
+                            elevated: '#181818',
+                            highlight: '#282828',
+                            press: '#3E3E3E',
+                            subdued: '#A7A7A7'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-spotify-black text-white font-sans antialiased select-none overflow-hidden h-screen flex flex-col">
+
+    <!-- Toast Notification (Replaces alert) -->
+    <div id="toast" class="fixed top-5 right-5 z-50 transform translate-x-full opacity-0 transition-all duration-300 bg-spotify-green text-black font-semibold px-5 py-3 rounded-full shadow-2xl flex items-center gap-3">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toast-message">แจ้งเตือน</span>
+    </div>
+
+    <!-- Create Playlist Modal -->
+    <div id="playlist-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-spotify-highlight w-full max-w-md rounded-2xl p-6 shadow-2xl border border-white/10">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">สร้างเพลย์ลิสต์ใหม่</h3>
+                <button onclick="closePlaylistModal()" class="text-spotify-subdued hover:text-white p-2">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-spotify-subdued mb-1">ชื่อเพลย์ลิสต์</label>
+                    <input type="text" id="new-playlist-name" placeholder="เพลย์ลิสต์ของฉัน #1" 
+                        class="w-full bg-spotify-elevated border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-spotify-green">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button onclick="closePlaylistModal()" class="px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-white/10 transition">ยกเลิก</button>
+                    <button onclick="createNewPlaylist()" class="px-6 py-2.5 rounded-full font-semibold text-sm bg-spotify-green text-black hover:bg-spotify-greenHover transition">สร้าง</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Workspace (Sidebar + Main View) -->
+    <div class="flex-1 flex overflow-hidden p-2 gap-2">
+        
+        <!-- Left Sidebar (Desktop) -->
+        <aside class="hidden md:flex flex-col w-72 lg:w-80 gap-2 flex-shrink-0">
+            <!-- Navigation Box -->
+            <div class="bg-spotify-base rounded-xl p-4 flex flex-col gap-4">
+                <div onclick="switchTab('home')" class="flex items-center gap-3 px-2 text-white font-extrabold text-xl tracking-tight cursor-pointer group">
+                    <!-- Custom Spotiflow Gradient SVG Logo -->
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#1DB954] to-[#0d8a3a] flex items-center justify-center shadow-lg shadow-spotify-green/25 group-hover:scale-105 transition-transform">
+                        <svg class="w-5 h-5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 10v4" />
+                            <path d="M8 7v10" />
+                            <path d="M12 4v16" />
+                            <path d="M16 8v8" />
+                            <path d="M20 11v2" />
+                        </svg>
+                    </div>
+                    <span class="bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">Spotiflow</span>
+                </div>
+                <nav class="flex flex-col gap-1">
+                    <button onclick="switchTab('home')" id="nav-home" class="nav-btn flex items-center gap-4 px-3 py-2.5 rounded-lg text-white font-semibold bg-spotify-highlight/50 transition">
+                        <i class="fa-solid fa-house text-xl w-6 text-center"></i>
+                        <span>หน้าหลัก</span>
+                    </button>
+                    <button onclick="switchTab('search')" id="nav-search" class="nav-btn flex items-center gap-4 px-3 py-2.5 rounded-lg text-spotify-subdued hover:text-white font-semibold transition">
+                        <i class="fa-solid fa-magnifying-glass text-xl w-6 text-center"></i>
+                        <span>ค้นหา</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Library Box -->
+            <div class="bg-spotify-base rounded-xl flex-1 flex flex-col overflow-hidden">
+                <div class="p-4 flex items-center justify-between shadow-sm">
+                    <button onclick="switchTab('library')" class="flex items-center gap-3 text-spotify-subdued hover:text-white font-semibold transition">
+                        <i class="fa-solid fa-lines-leaning text-xl"></i>
+                        <span>คอลเลกชันของคุณ</span>
+                    </button>
+                    <button onclick="openPlaylistModal()" title="สร้างเพลย์ลิสต์" class="w-8 h-8 rounded-full hover:bg-spotify-highlight flex items-center justify-center text-spotify-subdued hover:text-white transition">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+
+                <!-- Filter Pills -->
+                <div class="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
+                    <button onclick="filterLibrary('all')" class="px-3 py-1 rounded-full bg-spotify-highlight hover:bg-spotify-press text-xs font-medium whitespace-nowrap transition">ทั้งหมด</button>
+                    <button onclick="filterLibrary('liked')" class="px-3 py-1 rounded-full bg-spotify-highlight hover:bg-spotify-press text-xs font-medium whitespace-nowrap transition">เพลงที่ถูกใจ</button>
+                </div>
+
+                <!-- Playlist List -->
+                <div id="sidebar-playlists" class="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+                    <!-- Dynamic Playlists Injected Here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content View -->
+        <main id="main-scroll-container" class="flex-1 bg-spotify-base rounded-xl overflow-y-auto relative flex flex-col">
+            
+            <!-- Sticky Top Header -->
+            <header id="top-header" class="sticky top-0 z-30 bg-spotify-base/90 backdrop-blur-md px-4 md:px-6 py-3 flex items-center justify-between gap-4 transition-colors">
+                <div class="flex items-center gap-2 flex-1">
+                    <!-- Mobile Logo -->
+                    <div onclick="switchTab('home')" class="md:hidden flex items-center gap-2 mr-2 cursor-pointer">
+                        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1DB954] to-[#0d8a3a] flex items-center justify-center shadow-md shadow-spotify-green/20">
+                            <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 10v4" />
+                                <path d="M8 7v10" />
+                                <path d="M12 4v16" />
+                                <path d="M16 8v8" />
+                                <path d="M20 11v2" />
+                            </svg>
+                        </div>
+                        <span class="font-bold text-base tracking-tight">Spotiflow</span>
+                    </div>
+                    
+                    <!-- History Buttons (Desktop) -->
+                    <div class="hidden md:flex items-center gap-2">
+                        <button onclick="switchTab('home')" class="w-8 h-8 rounded-full bg-black/70 flex items-center justify-center text-spotify-subdued hover:text-white transition">
+                            <i class="fa-solid fa-chevron-left text-sm"></i>
+                        </button>
+                        <button onclick="switchTab('search')" class="w-8 h-8 rounded-full bg-black/70 flex items-center justify-center text-spotify-subdued hover:text-white transition">
+                            <i class="fa-solid fa-chevron-right text-sm"></i>
+                        </button>
+                    </div>
+
+                    <!-- Search Bar (Visible when in Search tab or always accessible) -->
+                    <div id="header-search-container" class="relative flex-1 max-w-md hidden">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-spotify-subdued text-sm"></i>
+                        <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="คุณอยากฟังเพลงอะไร ศิลปิน หรือแนวเพลง?" 
+                            class="w-full bg-spotify-highlight hover:bg-spotify-press focus:bg-spotify-highlight text-sm text-white rounded-full pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-white transition">
+                    </div>
+                </div>
+
+                <!-- Right Profile / Audio Status -->
+                <div class="flex items-center gap-3">
+                    <span class="hidden sm:inline-flex items-center gap-1.5 text-xs bg-white/10 px-3 py-1.5 rounded-full text-spotify-subdued">
+                        <span class="w-2 h-2 rounded-full bg-spotify-green animate-pulse"></span>
+                        Web Audio Synth
+                    </span>
+                    <button onclick="showToast('ยินดีต้อนรับสู่ Spotiflow!')" class="flex items-center gap-2 bg-black/70 hover:bg-spotify-highlight p-1 pr-3 rounded-full transition">
+                        <img src="https://placehold.co/100x100/1DB954/000000?text=U" alt="User" class="w-7 h-7 rounded-full object-cover">
+                        <span class="text-xs font-semibold hidden sm:inline">ผู้ใช้งาน</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dynamic Page Content -->
+            <div id="view-content" class="p-4 md:p-6 pb-24 flex-1">
+                <!-- Content rendered via JS -->
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="md:hidden bg-spotify-black/95 border-t border-white/10 flex justify-around py-2 px-4 z-40">
+        <button onclick="switchTab('home')" id="mob-nav-home" class="flex flex-col items-center gap-1 text-white text-xs">
+            <i class="fa-solid fa-house text-lg"></i>
+            <span>หน้าหลัก</span>
+        </button>
+        <button onclick="switchTab('search')" id="mob-nav-search" class="flex flex-col items-center gap-1 text-spotify-subdued text-xs">
+            <i class="fa-solid fa-magnifying-glass text-lg"></i>
+            <span>ค้นหา</span>
+        </button>
+        <button onclick="switchTab('library')" id="mob-nav-library" class="flex flex-col items-center gap-1 text-spotify-subdued text-xs">
+            <i class="fa-solid fa-lines-leaning text-lg"></i>
+            <span>คอลเลกชัน</span>
+        </button>
+    </nav>
+
+    <!-- Bottom Music Player Bar -->
+    <footer class="bg-spotify-black px-3 md:px-4 py-2.5 md:h-24 flex flex-col md:flex-row items-center justify-between gap-2 border-t border-white/5 z-40">
+        
+        <!-- Left: Now Playing Info -->
+        <div class="flex items-center justify-between w-full md:w-1/3 min-w-0">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="relative group flex-shrink-0">
+                    <img id="player-cover" src="https://placehold.co/300x300/181818/1DB954?text=Music" alt="Cover" class="w-12 h-12 md:w-14 md:h-14 rounded-lg object-cover shadow-lg">
+                    <div id="playing-visualizer" class="hidden absolute inset-0 bg-black/50 rounded-lg items-center justify-center gap-1">
+                        <span class="w-1 h-3 bg-spotify-green animate-bounce"></span>
+                        <span class="w-1 h-5 bg-spotify-green animate-pulse"></span>
+                        <span class="w-1 h-2 bg-spotify-green animate-bounce"></span>
+                    </div>
+                </div>
+                <div class="min-w-0">
+                    <h4 id="player-title" class="text-sm font-semibold text-white truncate hover:underline cursor-pointer">เลือกเพลงเพื่อเริ่มฟัง</h4>
+                    <p id="player-artist" class="text-xs text-spotify-subdued truncate">Spotiflow Studio</p>
+                </div>
+                <button id="player-like-btn" onclick="toggleLikeCurrent()" class="ml-2 text-spotify-subdued hover:text-white transition p-2">
+                    <i class="fa-regular fa-heart"></i>
+                </button>
+            </div>
+
+            <!-- Mobile Mini Play Button -->
+            <div class="flex items-center gap-2 md:hidden">
+                <button onclick="togglePlay()" id="mob-play-btn" class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow">
+                    <i class="fa-solid fa-play ml-0.5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Center: Playback Controls & Progress Bar -->
+        <div class="hidden md:flex flex-col items-center max-w-xl w-full md:w-1/3 gap-1.5">
+            <div class="flex items-center gap-5">
+                <button id="shuffle-btn" onclick="toggleShuffle()" title="สุ่มเพลง" class="text-spotify-subdued hover:text-white transition text-sm">
+                    <i class="fa-solid fa-shuffle"></i>
+                </button>
+                <button onclick="prevTrack()" title="เพลงก่อนหน้า" class="text-spotify-subdued hover:text-white transition text-lg">
+                    <i class="fa-solid fa-backward-step"></i>
+                </button>
+                <button onclick="togglePlay()" id="play-pause-btn" title="เล่น / หยุด" class="w-9 h-9 rounded-full bg-white hover:scale-105 text-black flex items-center justify-center transition shadow-md">
+                    <i class="fa-solid fa-play ml-0.5 text-sm"></i>
+                </button>
+                <button onclick="nextTrack()" title="เพลงถัดไป" class="text-spotify-subdued hover:text-white transition text-lg">
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+                <button id="repeat-btn" onclick="toggleRepeat()" title="เล่นซ้ำ" class="text-spotify-subdued hover:text-white transition text-sm">
+                    <i class="fa-solid fa-repeat"></i>
+                </button>
+            </div>
+
+            <!-- Progress Scrubber -->
+            <div class="w-full flex items-center gap-2 text-xs text-spotify-subdued">
+                <span id="current-time" class="w-10 text-right tabular-nums">0:00</span>
+                <div id="progress-container" onclick="seekAudio(event)" class="flex-1 h-1.5 bg-spotify-press rounded-full cursor-pointer group relative flex items-center">
+                    <div id="progress-bar" class="h-full bg-white group-hover:bg-spotify-green rounded-full w-0 relative">
+                        <div class="hidden group-hover:block w-3 h-3 bg-white rounded-full absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 shadow"></div>
+                    </div>
+                </div>
+                <span id="total-time" class="w-10 tabular-nums">0:00</span>
+            </div>
+        </div>
+
+        <!-- Right: Volume & Extra Controls -->
+        <div class="hidden md:flex items-center justify-end gap-3 w-1/3">
+            <button onclick="showToast('กำลังแสดงคิวเพลงปัจจุบัน')" title="คิวเพลง" class="text-spotify-subdued hover:text-white transition text-sm p-2">
+                <i class="fa-solid fa-list-ul"></i>
+            </button>
+            <button onclick="toggleMute()" id="volume-icon" class="text-spotify-subdued hover:text-white transition text-sm">
+                <i class="fa-solid fa-volume-high"></i>
+            </button>
+            <div class="w-24 flex items-center">
+                <input type="range" id="volume-slider" min="0" max="100" value="80" oninput="changeVolume(this.value)"
+                    class="w-full h-1 bg-spotify-press rounded-lg appearance-none cursor-pointer accent-spotify-green">
+            </div>
+        </div>
+    </footer>
+
+    <!-- Application Logic -->
+    <script>
+        /**
+         * 1. MOCK DATABASE & MUSICAL PATTERNS
+         * Each song includes a musical scale/chord progression played cleanly by Tone.js
+         */
+        const SONGS_DB = [
+            {
+                id: 1,
+                title: "Midnight in Bangkok (คืนข้ามปี)",
+                artist: "Neon Breeze",
+                album: "Chao Phraya Nights",
+                genre: "Lo-Fi / Chill",
+                duration: 45,
+                cover: "https://placehold.co/400x400/1e1b4b/38bdf8?text=Bangkok+Night",
+                color: "from-indigo-900",
+                tempo: 95,
+                chords: [["C4", "E4", "G4", "B4"], ["A3", "C4", "E4", "G4"], ["F3", "A3", "C4", "E4"], ["G3", "B3", "D4", "F4"]]
+            },
+            {
+                id: 2,
+                title: "แสงดาวและสายลม (Starlight)",
+                artist: "The Velvet Echo",
+                album: "Acoustic Dreams",
+                genre: "Indie Pop",
+                duration: 50,
+                cover: "https://placehold.co/400x400/064e3b/34d399?text=Starlight",
+                color: "from-emerald-900",
+                tempo: 110,
+                chords: [["G4", "B4", "D5"], ["E4", "G4", "B4"], ["C4", "E4", "G4"], ["D4", "F#4", "A4"]]
+            },
+            {
+                id: 3,
+                title: "Cyberpunk Rain 2099",
+                artist: "SynthWave Collective",
+                album: "Digital Horizon",
+                genre: "Electronic",
+                duration: 60,
+                cover: "https://placehold.co/400x400/701a75/f472b6?text=Cyber+Rain",
+                color: "from-fuchsia-900",
+                tempo: 124,
+                chords: [["D3", "F3", "A3", "C4"], ["Bb2", "D3", "F3", "A3"], ["G2", "Bb2", "D3", "F3"], ["A2", "C#3", "E3", "G3"]]
+            },
+            {
+                id: 4,
+                title: "กาแฟยามเช้า (Morning Coffee)",
+                artist: "Sunday Jazz Trio",
+                album: "Cafe Vibes",
+                genre: "Jazz",
+                duration: 40,
+                cover: "https://placehold.co/400x400/78350f/fbbf24?text=Morning+Jazz",
+                color: "from-amber-900",
+                tempo: 88,
+                chords: [["F4", "A4", "C5", "E5"], ["D4", "F4", "A4", "C5"], ["G4", "Bb4", "D5", "F5"], ["C4", "E4", "G4", "Bb4"]]
+            },
+            {
+                id: 5,
+                title: "คลื่นทะเลสีคราม (Ocean Waves)",
+                artist: "Andaman Soul",
+                album: "Summer Breeze",
+                genre: "Chillout",
+                duration: 55,
+                cover: "https://placehold.co/400x400/0c4a6e/7dd3fc?text=Ocean+Waves",
+                color: "from-sky-900",
+                tempo: 100,
+                chords: [["E4", "G#4", "B4"], ["C#4", "E4", "G#4"], ["A3", "C#4", "E4"], ["B3", "D#4", "F#4"]]
+            },
+            {
+                id: 6,
+                title: "Focus & Deep Work",
+                artist: "Mindful Beats",
+                album: "Study Session Vol. 4",
+                genre: "Ambient",
+                duration: 65,
+                cover: "https://placehold.co/400x400/1f2937/9ca3af?text=Deep+Focus",
+                color: "from-gray-800",
+                tempo: 80,
+                chords: [["C3", "G3", "D4"], ["A2", "E3", "B3"], ["F2", "C3", "G3"], ["G2", "D3", "A3"]]
+            },
+            {
+                id: 7,
+                title: "รักแรกพบ (First Sight)",
+                artist: "Polycatty",
+                album: "80s Retro Thai",
+                genre: "Synth Pop",
+                duration: 48,
+                cover: "https://placehold.co/400x400/881337/fda4af?text=First+Sight",
+                color: "from-rose-900",
+                tempo: 118,
+                chords: [["A3", "C#4", "E4", "G#4"], ["F#3", "A3", "C#4", "E4"], ["D3", "F#3", "A3", "C#4"], ["E3", "G#3", "B3", "D4"]]
+            },
+            {
+                id: 8,
+                title: "Sunset Drive (ขับรถชมวิว)",
+                artist: "Highway 404",
+                album: "Golden Hour",
+                genre: "Indie Rock",
+                duration: 52,
+                cover: "https://placehold.co/400x400/9a3412/fdba74?text=Sunset+Drive",
+                color: "from-orange-900",
+                tempo: 114,
+                chords: [["C4", "E4", "G4"], ["G3", "B3", "D4"], ["A3", "C4", "E4"], ["F3", "A3", "C4"]]
+            }
+        ];
+
+        const CATEGORIES = [
+            { name: "เพลงฮิตติดชาร์ต", color: "bg-pink-600", icon: "fa-fire" },
+            { name: "Lo-Fi & อ่านหนังสือ", color: "bg-indigo-600", icon: "fa-headphones" },
+            { name: "ป๊อปไทยฟังสบาย", color: "bg-emerald-600", icon: "fa-music" },
+            { name: "แจ๊ส & คาเฟ่", color: "bg-amber-600", icon: "fa-mug-hot" },
+            { name: "อิเล็กทรอนิกส์", color: "bg-purple-600", icon: "fa-bolt" },
+            { name: "เพลงชิลริมทะเล", color: "bg-sky-600", icon: "fa-water" }
+        ];
+
+        /**
+         * 2. STATE MANAGEMENT
+         */
+        let state = {
+            currentTab: 'home',
+            currentSong: SONGS_DB[0],
+            isPlaying: false,
+            isShuffle: false,
+            isRepeat: false,
+            volume: 80,
+            isMuted: false,
+            elapsedSeconds: 0,
+            likedSongIds: [1, 2, 7],
+            playlists: [
+                { id: 'liked', name: 'เพลงที่ถูกใจ', icon: 'fa-heart', isSystem: true, songIds: [1, 2, 7] },
+                { id: 'pl-1', name: 'ขับรถชิลๆ ยามเย็น', icon: 'fa-music', isSystem: false, songIds: [1, 5, 8] },
+                { id: 'pl-2', name: 'ทำงาน & อ่านหนังสือ', icon: 'fa-book', isSystem: false, songIds: [4, 6] }
+            ],
+            activePlaylistId: null,
+            searchQuery: ''
+        };
+
+        /**
+         * 3. WEB AUDIO SYNTH ENGINE (Tone.js)
+         * Generates real pleasant music chords & melodies so the app actually plays audio!
+         */
+        let synth = null;
+        let bassSynth = null;
+        let loopEvent = null;
+        let progressInterval = null;
+        let chordStep = 0;
+
+        async function initAudioEngine() {
+            if (!synth) {
+                await Tone.start();
+                // Warm Electric Piano / Pad sound
+                synth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.08, decay: 0.3, sustain: 0.4, release: 1.2 }
+                }).toDestination();
+
+                // Soft Bassline
+                bassSynth = new Tone.Synth({
+                    oscillator: { type: "sine" },
+                    envelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 0.8 }
+                }).toDestination();
+
+                updateSynthVolume();
+            }
+        }
+
+        function updateSynthVolume() {
+            if (!synth) return;
+            if (state.isMuted || state.volume == 0) {
+                Tone.Destination.mute = true;
+            } else {
+                Tone.Destination.mute = false;
+                // Convert 0-100 to decibels (-40dB to 0dB)
+                const db = (state.volume / 100) * 35 - 35;
+                Tone.Destination.volume.value = db;
+            }
+        }
+
+        function startMusicPlayback() {
+            stopMusicPlayback();
+            const song = state.currentSong;
+            Tone.Transport.bpm.value = song.tempo;
+            chordStep = 0;
+
+            loopEvent = new Tone.Loop((time) => {
+                const currentChord = song.chords[chordStep % song.chords.length];
+                // Play chord
+                synth.triggerAttackRelease(currentChord, "2n", time, 0.5);
+                // Play root bass note one octave lower
+                const rootNote = currentChord[0].replace(/[0-9]/, (m) => Math.max(1, parseInt(m) - 1));
+                bassSynth.triggerAttackRelease(rootNote, "2n", time, 0.6);
+                chordStep++;
+            }, "1m").start(0);
+
+            Tone.Transport.start();
+
+            // Start UI Progress Timer
+            progressInterval = setInterval(() => {
+                if (state.isPlaying) {
+                    state.elapsedSeconds++;
+                    if (state.elapsedSeconds >= state.currentSong.duration) {
+                        handleSongEnd();
+                    } else {
+                        updateProgressUI();
+                    }
+                }
+            }, 1000);
+        }
+
+        function stopMusicPlayback() {
+            if (loopEvent) {
+                loopEvent.dispose();
+                loopEvent = null;
+            }
+            Tone.Transport.stop();
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        }
+
+        function handleSongEnd() {
+            if (state.isRepeat) {
+                state.elapsedSeconds = 0;
+                updateProgressUI();
+            } else {
+                nextTrack();
+            }
+        }
+
+        /**
+         * 4. PLAYER CONTROLS
+         */
+        async function playSong(songId) {
+            const song = SONGS_DB.find(s => s.id === songId);
+            if (!song) return;
+
+            await initAudioEngine();
+
+            state.currentSong = song;
+            state.elapsedSeconds = 0;
+            state.isPlaying = true;
+
+            updatePlayerUI();
+            startMusicPlayback();
+            renderCurrentView(); // Update active playing indicators
+        }
+
+        async function togglePlay() {
+            await initAudioEngine();
+
+            if (state.isPlaying) {
+                state.isPlaying = false;
+                stopMusicPlayback();
+            } else {
+                state.isPlaying = true;
+                startMusicPlayback();
+            }
+            updatePlayerUI();
+            renderCurrentView();
+        }
+
+        function nextTrack() {
+            let nextIndex;
+            const currentIndex = SONGS_DB.findIndex(s => s.id === state.currentSong.id);
+
+            if (state.isShuffle) {
+                nextIndex = Math.floor(Math.random() * SONGS_DB.length);
+            } else {
+                nextIndex = (currentIndex + 1) % SONGS_DB.length;
+            }
+            playSong(SONGS_DB[nextIndex].id);
+        }
+
+        function prevTrack() {
+            if (state.elapsedSeconds > 3) {
+                state.elapsedSeconds = 0;
+                updateProgressUI();
+                return;
+            }
+            const currentIndex = SONGS_DB.findIndex(s => s.id === state.currentSong.id);
+            const prevIndex = (currentIndex - 1 + SONGS_DB.length) % SONGS_DB.length;
+            playSong(SONGS_DB[prevIndex].id);
+        }
+
+        function toggleShuffle() {
+            state.isShuffle = !state.isShuffle;
+            const btn = document.getElementById('shuffle-btn');
+            btn.classList.toggle('text-spotify-green', state.isShuffle);
+            btn.classList.toggle('text-spotify-subdued', !state.isShuffle);
+            showToast(state.isShuffle ? 'เปิดการสุ่มเพลง' : 'ปิดการสุ่มเพลง');
+        }
+
+        function toggleRepeat() {
+            state.isRepeat = !state.isRepeat;
+            const btn = document.getElementById('repeat-btn');
+            btn.classList.toggle('text-spotify-green', state.isRepeat);
+            btn.classList.toggle('text-spotify-subdued', !state.isRepeat);
+            showToast(state.isRepeat ? 'เปิดการเล่นซ้ำเพลงนี้' : 'ปิดการเล่นซ้ำ');
+        }
+
+        function seekAudio(event) {
+            const container = document.getElementById('progress-container');
+            const rect = container.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+            state.elapsedSeconds = Math.floor(percentage * state.currentSong.duration);
+            updateProgressUI();
+        }
+
+        function changeVolume(val) {
+            state.volume = val;
+            state.isMuted = (val == 0);
+            updateVolumeIcon();
+            updateSynthVolume();
+        }
+
+        function toggleMute() {
+            state.isMuted = !state.isMuted;
+            const slider = document.getElementById('volume-slider');
+            if (state.isMuted) {
+                slider.value = 0;
+            } else {
+                slider.value = state.volume || 80;
+            }
+            updateVolumeIcon();
+            updateSynthVolume();
+        }
+
+        function updateVolumeIcon() {
+            const icon = document.getElementById('volume-icon');
+            if (state.isMuted || state.volume == 0) {
+                icon.innerHTML = '<i class="fa-solid fa-volume-xmark text-red-400"></i>';
+            } else if (state.volume < 50) {
+                icon.innerHTML = '<i class="fa-solid fa-volume-low"></i>';
+            } else {
+                icon.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+            }
+        }
+
+        function toggleLikeSong(songId, event) {
+            if (event) event.stopPropagation();
+            const idx = state.likedSongIds.indexOf(songId);
+            const likedPlaylist = state.playlists.find(p => p.id === 'liked');
+
+            if (idx === -1) {
+                state.likedSongIds.push(songId);
+                if (likedPlaylist) likedPlaylist.songIds.push(songId);
+                showToast('เพิ่มลงในเพลงที่ถูกใจแล้ว');
+            } else {
+                state.likedSongIds.splice(idx, 1);
+                if (likedPlaylist) likedPlaylist.songIds = likedPlaylist.songIds.filter(id => id !== songId);
+                showToast('นำออกจากเพลงที่ถูกใจแล้ว');
+            }
+            updatePlayerUI();
+            renderSidebarPlaylists();
+            renderCurrentView();
+        }
+
+        function toggleLikeCurrent() {
+            toggleLikeSong(state.currentSong.id);
+        }
+
+        /**
+         * 5. UI UPDATERS & RENDERERS
+         */
+        function formatTime(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function updatePlayerUI() {
+            const song = state.currentSong;
+            document.getElementById('player-cover').src = song.cover;
+            document.getElementById('player-title').textContent = song.title;
+            document.getElementById('player-artist').textContent = song.artist;
+            document.getElementById('total-time').textContent = formatTime(song.duration);
+
+            // Play/Pause icons
+            const playIcon = state.isPlaying ? '<i class="fa-solid fa-pause text-sm"></i>' : '<i class="fa-solid fa-play ml-0.5 text-sm"></i>';
+            document.getElementById('play-pause-btn').innerHTML = playIcon;
+            document.getElementById('mob-play-btn').innerHTML = playIcon;
+
+            // Visualizer on album art
+            const vis = document.getElementById('playing-visualizer');
+            if (state.isPlaying) {
+                vis.classList.remove('hidden');
+                vis.classList.add('flex');
+            } else {
+                vis.classList.add('hidden');
+                vis.classList.remove('flex');
+            }
+
+            // Like Button
+            const isLiked = state.likedSongIds.includes(song.id);
+            const likeBtn = document.getElementById('player-like-btn');
+            likeBtn.innerHTML = isLiked 
+                ? '<i class="fa-solid fa-heart text-spotify-green"></i>' 
+                : '<i class="fa-regular fa-heart"></i>';
+
+            updateProgressUI();
+        }
+
+        function updateProgressUI() {
+            document.getElementById('current-time').textContent = formatTime(state.elapsedSeconds);
+            const pct = (state.elapsedSeconds / state.currentSong.duration) * 100;
+            document.getElementById('progress-bar').style.width = `${Math.min(100, pct)}%`;
+        }
+
+        function switchTab(tab, playlistId = null) {
+            state.currentTab = tab;
+            state.activePlaylistId = playlistId;
+
+            // Update Desktop Nav styling
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-white', 'bg-spotify-highlight/50');
+                btn.classList.add('text-spotify-subdued');
+            });
+            const activeNav = document.getElementById(`nav-${tab}`);
+            if (activeNav) {
+                activeNav.classList.add('text-white', 'bg-spotify-highlight/50');
+                activeNav.classList.remove('text-spotify-subdued');
+            }
+
+            // Update Mobile Nav styling
+            ['home', 'search', 'library'].forEach(t => {
+                const mBtn = document.getElementById(`mob-nav-${t}`);
+                if (mBtn) {
+                    mBtn.classList.toggle('text-white', t === tab);
+                    mBtn.classList.toggle('text-spotify-subdued', t !== tab);
+                }
+            });
+
+            // Toggle Search Input in Header
+            const searchContainer = document.getElementById('header-search-container');
+            if (tab === 'search') {
+                searchContainer.classList.remove('hidden');
+                setTimeout(() => document.getElementById('search-input').focus(), 100);
+            } else {
+                searchContainer.classList.add('hidden');
+            }
+
+            document.getElementById('main-scroll-container').scrollTop = 0;
+            renderCurrentView();
+        }
+
+        function renderSidebarPlaylists() {
+            const container = document.getElementById('sidebar-playlists');
+            container.innerHTML = state.playlists.map(pl => {
+                const isActive = state.currentTab === 'playlist' && state.activePlaylistId === pl.id;
+                const bgClass = isActive ? 'bg-spotify-highlight' : 'hover:bg-spotify-highlight/50';
+                const iconBg = pl.id === 'liked' 
+                    ? 'bg-gradient-to-br from-indigo-600 to-purple-400 text-white' 
+                    : 'bg-spotify-elevated text-spotify-subdued';
+
+                return `
+                    <div onclick="switchTab('playlist', '${pl.id}')" class="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition ${bgClass}">
+                        <div class="w-12 h-12 rounded-md ${iconBg} flex items-center justify-center flex-shrink-0 shadow">
+                            <i class="fa-solid ${pl.icon}"></i>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold truncate ${isActive ? 'text-spotify-green' : 'text-white'}">${pl.name}</p>
+                            <p class="text-xs text-spotify-subdued truncate">เพลย์ลิสต์ • ${pl.songIds.length} เพลง</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderCurrentView() {
+            const container = document.getElementById('view-content');
+            const header = document.getElementById('top-header');
+
+            if (state.currentTab === 'home') {
+                header.className = "sticky top-0 z-30 bg-spotify-base/90 backdrop-blur-md px-4 md:px-6 py-3 flex items-center justify-between gap-4";
+                renderHomeView(container);
+            } else if (state.currentTab === 'search') {
+                renderSearchView(container);
+            } else if (state.currentTab === 'playlist') {
+                renderPlaylistView(container, state.activePlaylistId);
+            } else if (state.currentTab === 'library') {
+                renderMobileLibraryView(container);
+            }
+        }
+
+        function getGreeting() {
+            const hour = new Date().getHours();
+            if (hour < 12) return "สวัสดีตอนเช้า";
+            if (hour < 18) return "สวัสดีตอนบ่าย";
+            return "สวัสดีตอนเย็น";
+        }
+
+        function renderHomeView(container) {
+            const quickPicks = SONGS_DB.slice(0, 6);
+
+            container.innerHTML = `
+                <!-- Ambient Top Gradient -->
+                <div class="absolute inset-x-0 top-0 h-72 bg-gradient-to-b ${state.currentSong.color} to-spotify-base opacity-40 pointer-events-none"></div>
+
+                <div class="relative z-10 space-y-8">
+                    <!-- Greeting & Quick Grid -->
+                    <section>
+                        <h1 class="text-2xl md:text-3xl font-bold mb-4 tracking-tight">${getGreeting()}</h1>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            ${quickPicks.map(song => {
+                                const isCurrent = state.currentSong.id === song.id;
+                                return `
+                                <div onclick="playSong(${song.id})" class="group bg-white/10 hover:bg-white/20 rounded-md overflow-hidden flex items-center justify-between pr-3 cursor-pointer transition">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <img src="${song.cover}" alt="${song.title}" class="w-14 h-14 object-cover shadow-md">
+                                        <span class="font-semibold text-sm truncate ${isCurrent ? 'text-spotify-green' : 'text-white'}">${song.title}</span>
+                                    </div>
+                                    <button class="w-10 h-10 rounded-full bg-spotify-green text-black flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all">
+                                        <i class="fa-solid ${isCurrent && state.isPlaying ? 'fa-pause' : 'fa-play'} text-sm ml-0.5"></i>
+                                    </button>
+                                </div>
+                            `}).join('')}
+                        </div>
+                    </section>
+
+                    <!-- Made For You (Album Cards) -->
+                    <section>
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-bold hover:underline cursor-pointer">จัดทำขึ้นเพื่อคุณโดยเฉพาะ</h2>
+                            <span class="text-xs font-semibold text-spotify-subdued hover:text-white cursor-pointer">แสดงทั้งหมด</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            ${SONGS_DB.map(song => renderSongCard(song)).join('')}
+                        </div>
+                    </section>
+
+                    <!-- Popular Tracklist Table -->
+                    <section>
+                        <h2 class="text-xl font-bold mb-4">เพลงฮิตติดเทรนด์วันนี้</h2>
+                        <div class="bg-spotify-elevated/50 rounded-xl p-2 md:p-4">
+                            ${renderSongTable(SONGS_DB)}
+                        </div>
+                    </section>
+                </div>
+            `;
+        }
+
+        function renderSongCard(song) {
+            const isCurrent = state.currentSong.id === song.id;
+            return `
+                <div onclick="playSong(${song.id})" class="group bg-spotify-elevated hover:bg-spotify-highlight p-4 rounded-xl transition cursor-pointer flex flex-col">
+                    <div class="relative mb-4 aspect-square rounded-lg overflow-hidden shadow-lg">
+                        <img src="${song.cover}" alt="${song.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                        <button class="absolute bottom-2 right-2 w-11 h-11 rounded-full bg-spotify-green hover:bg-spotify-greenHover text-black flex items-center justify-center shadow-xl transition-all duration-300 ${isCurrent && state.isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0'}">
+                            <i class="fa-solid ${isCurrent && state.isPlaying ? 'fa-pause' : 'fa-play'} ml-0.5"></i>
+                        </button>
+                    </div>
+                    <h3 class="font-bold text-sm truncate mb-1 ${isCurrent ? 'text-spotify-green' : 'text-white'}">${song.title}</h3>
+                    <p class="text-xs text-spotify-subdued line-clamp-2">${song.artist} • ${song.genre}</p>
+                </div>
+            `;
+        }
+
+        function renderSongTable(songs) {
+            if (songs.length === 0) {
+                return `<div class="text-center py-10 text-spotify-subdued">ไม่พบเพลงในรายการนี้</div>`;
+            }
+
+            return `
+                <div class="divide-y divide-white/5">
+                    ${songs.map((song, idx) => {
+                        const isCurrent = state.currentSong.id === song.id;
+                        const isLiked = state.likedSongIds.includes(song.id);
+                        return `
+                        <div onclick="playSong(${song.id})" class="group flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer transition">
+                            <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                                <span class="w-5 text-center text-sm ${isCurrent ? 'text-spotify-green font-bold' : 'text-spotify-subdued'}">
+                                    ${isCurrent && state.isPlaying ? '<i class="fa-solid fa-volume-high animate-pulse"></i>' : idx + 1}
+                                </span>
+                                <img src="${song.cover}" alt="${song.title}" class="w-10 h-10 rounded object-cover flex-shrink-0">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium truncate ${isCurrent ? 'text-spotify-green' : 'text-white'}">${song.title}</p>
+                                    <p class="text-xs text-spotify-subdued truncate">${song.artist}</p>
+                                </div>
+                            </div>
+
+                            <div class="hidden md:block text-xs text-spotify-subdued flex-1 truncate px-4">
+                                ${song.album}
+                            </div>
+
+                            <div class="flex items-center gap-4">
+                                <button onclick="toggleLikeSong(${song.id}, event)" class="text-sm ${isLiked ? 'text-spotify-green' : 'text-spotify-subdued opacity-0 group-hover:opacity-100'} hover:scale-110 transition">
+                                    <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                                </button>
+                                <span class="text-xs text-spotify-subdued w-10 text-right tabular-nums">${formatTime(song.duration)}</span>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
+            `;
+        }
+
+        function renderSearchView(container) {
+            const q = state.searchQuery.toLowerCase().trim();
+            const filtered = q 
+                ? SONGS_DB.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) || s.genre.toLowerCase().includes(q))
+                : [];
+
+            if (q) {
+                container.innerHTML = `
+                    <h2 class="text-xl font-bold mb-4">ผลการค้นหาสำหรับ "${state.searchQuery}"</h2>
+                    <div class="bg-spotify-elevated/50 rounded-xl p-2 md:p-4">
+                        ${renderSongTable(filtered)}
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <h2 class="text-xl font-bold mb-4">เลือกดูตามหมวดหมู่</h2>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        ${CATEGORIES.map(cat => `
+                            <div onclick="quickFilterCategory('${cat.name}')" class="${cat.color} h-36 rounded-xl p-4 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition shadow-lg">
+                                <h3 class="font-bold text-lg max-w-[75%]">${cat.name}</h3>
+                                <i class="fa-solid ${cat.icon} text-5xl text-white/30 absolute -bottom-2 -right-2 rotate-12"></i>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        }
+
+        function handleSearch(val) {
+            state.searchQuery = val;
+            renderSearchView(document.getElementById('view-content'));
+        }
+
+        function quickFilterCategory(catName) {
+            const input = document.getElementById('search-input');
+            // Map Thai category to sample search or show all
+            input.value = '';
+            state.searchQuery = '';
+            const container = document.getElementById('view-content');
+            container.innerHTML = `
+                <div class="flex items-center gap-3 mb-6">
+                    <button onclick="switchTab('search')" class="w-8 h-8 rounded-full bg-spotify-highlight flex items-center justify-center hover:bg-spotify-press">
+                        <i class="fa-solid fa-arrow-left text-sm"></i>
+                    </button>
+                    <h2 class="text-2xl font-bold">${catName}</h2>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    ${SONGS_DB.map(song => renderSongCard(song)).join('')}
+                </div>
+            `;
+        }
+
+        function renderPlaylistView(container, playlistId) {
+            const pl = state.playlists.find(p => p.id === playlistId) || state.playlists[0];
+            const songs = SONGS_DB.filter(s => pl.songIds.includes(s.id));
+            const bannerGrad = pl.id === 'liked' ? 'from-indigo-800' : 'from-emerald-800';
+
+            container.innerHTML = `
+                <div class="absolute inset-x-0 top-0 h-80 bg-gradient-to-b ${bannerGrad} to-spotify-base opacity-60 pointer-events-none"></div>
+                
+                <div class="relative z-10">
+                    <!-- Playlist Header -->
+                    <div class="flex flex-col md:flex-row items-center md:items-end gap-6 mb-8 pt-4">
+                        <div class="w-44 h-44 md:w-52 md:h-52 rounded-xl shadow-2xl bg-gradient-to-br from-indigo-600 to-purple-500 flex items-center justify-center flex-shrink-0">
+                            <i class="fa-solid ${pl.icon} text-6xl text-white"></i>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <span class="text-xs font-bold uppercase tracking-wider">เพลย์ลิสต์</span>
+                            <h1 class="text-3xl md:text-5xl font-extrabold my-2 tracking-tight">${pl.name}</h1>
+                            <p class="text-sm text-spotify-subdued">สร้างโดย ผู้ใช้งาน • ${songs.length} เพลง</p>
+                        </div>
+                    </div>
+
+                    <!-- Action Bar -->
+                    <div class="flex items-center gap-4 mb-6">
+                        <button onclick="${songs.length ? `playSong(${songs[0].id})` : ''}" class="w-14 h-14 rounded-full bg-spotify-green hover:bg-spotify-greenHover hover:scale-105 text-black flex items-center justify-center shadow-xl transition">
+                            <i class="fa-solid fa-play text-xl ml-1"></i>
+                        </button>
+                    </div>
+
+                    <!-- Songs List -->
+                    <div class="bg-black/20 rounded-xl p-2 md:p-4">
+                        ${renderSongTable(songs)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderMobileLibraryView(container) {
+            container.innerHTML = `
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-2xl font-bold">คอลเลกชันของคุณ</h1>
+                    <button onclick="openPlaylistModal()" class="w-9 h-9 rounded-full bg-spotify-highlight flex items-center justify-center">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <div class="space-y-3">
+                    ${state.playlists.map(pl => `
+                        <div onclick="switchTab('playlist', '${pl.id}')" class="flex items-center gap-4 p-2 rounded-xl bg-spotify-elevated active:bg-spotify-highlight">
+                            <div class="w-14 h-14 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-500 flex items-center justify-center">
+                                <i class="fa-solid ${pl.icon} text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-base">${pl.name}</h3>
+                                <p class="text-xs text-spotify-subdued">เพลย์ลิสต์ • ${pl.songIds.length} เพลง</p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        /**
+         * 6. MODAL & TOAST HELPERS
+         */
+        function openPlaylistModal() {
+            const modal = document.getElementById('playlist-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('new-playlist-name').focus();
+        }
+
+        function closePlaylistModal() {
+            const modal = document.getElementById('playlist-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('new-playlist-name').value = '';
+        }
+
+        function createNewPlaylist() {
+            const input = document.getElementById('new-playlist-name');
+            const name = input.value.trim() || `เพลย์ลิสต์ของฉัน #${state.playlists.length}`;
+            const newId = 'pl-' + Date.now();
+            
+            // Add random 3 songs so the new playlist isn't empty
+            const sampleSongs = [SONGS_DB[0].id, SONGS_DB[2].id, SONGS_DB[4].id];
+
+            state.playlists.push({
+                id: newId,
+                name: name,
+                icon: 'fa-music',
+                isSystem: false,
+                songIds: sampleSongs
+            });
+
+            closePlaylistModal();
+            renderSidebarPlaylists();
+            switchTab('playlist', newId);
+            showToast(`สร้างเพลย์ลิสต์ "${name}" เรียบร้อยแล้ว`);
+        }
+
+        function filterLibrary(type) {
+            if (type === 'liked') {
+                switchTab('playlist', 'liked');
+            } else {
+                switchTab('home');
+            }
+        }
+
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = msg;
+            toast.classList.remove('translate-x-full', 'opacity-0');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+            }, 3000);
+        }
+
+        // Initialize App on Load
+        window.onload = () => {
+            renderSidebarPlaylists();
+            updatePlayerUI();
+            renderCurrentView();
+        };
+    </script>
+</body>
+</html>
